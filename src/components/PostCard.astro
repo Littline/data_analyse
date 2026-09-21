@@ -1,0 +1,35 @@
+---
+import type { Post } from '../lib/posts';
+import { excerptOf, formatDate, isoDate, postUrl, readingTime, tagUrl } from '../utils/format';
+
+interface Props {
+  post: Post;
+  showTags?: boolean;
+}
+
+const { post, showTags = true } = Astro.props;
+const href = postUrl(post);
+---
+
+<li class="post-card">
+  <h3 class="post-card__title">
+    <a href={href}>{post.data.title}</a>
+  </h3>
+  <p class="post-card__desc">{excerptOf(post)}</p>
+  <div class="post-card__meta">
+    <time datetime={isoDate(post.data.pubDate)}>{formatDate(post.data.pubDate)}</time>
+    <span>{readingTime(post.body)} 分钟阅读</span>
+    {post.data.draft && <span class="badge-draft">草稿</span>}
+  </div>
+  {
+    showTags && post.data.tags.length > 0 && (
+      <ul class="tag-list" style="margin-top: 0.75rem;">
+        {post.data.tags.map((tag) => (
+          <li>
+            <a class="tag" href={tagUrl(tag)}>#{tag}</a>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+</li>

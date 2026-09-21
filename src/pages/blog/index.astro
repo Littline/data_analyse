@@ -1,0 +1,48 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PostCard from '../../components/PostCard.astro';
+import { isAdmin } from '../../lib/auth';
+import { listPosts } from '../../lib/posts';
+import { isoDate } from '../../utils/format';
+
+const posts = await listPosts({ includeDrafts: isAdmin(Astro.cookies) });
+
+// 按年份分组，方便长期积累大量文章后查找
+const groups = posts.reduce<Map<string, typeof posts>>((acc, post) => {
+  const year = String(post.data.pubDate.getFullYear());
+  acc.set(year, [...(acc.get(year) ?? []), post]);
+  return acc;
+}, new Map());
+---
+
+<BaseLayout title="全部文章" description="按时间倒序排列的全部文章。">
+  <div class="container container--wide">
+    <h1 class="page-title">全部文章</h1>
+    <p class="page-subtitle">共 {posts.length} 篇 · 最新更新：{posts[0] ? isoDate(posts[0].data.pubDate) : '—'}</p>
+
+    {
+      posts.length === 0 ? (
+        <div class="empty">
+          <p>还没有文章。</p>
+          <p>
+            把 Markdown 文件放进 <code>src/content/blog/</code> 目录就会自动出现在这里。
+          </p>
+        </div>
+      ) : (
+        [...groups.entries()].map(([year, yearPosts]) => (
+          <>
+            <div class="section-title">
+              <h2 style="font-size: 1.05rem; margin: 0; color: var(--text-soft);">{year} 年</h2>
+              <span style="color: var(--text-mute); font-size: 0.85rem;">{yearPosts.length} 篇</span>
+            </div>
+            <ul class="post-list">
+              {yearPosts.map((post) => (
+                <PostCard post={post} />
+              ))}
+            </ul>
+          </>
+        ))
+      )
+    }
+  </div>
+</BaseLayout>

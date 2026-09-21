@@ -1,0 +1,42 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { listPosts } from '../../lib/posts';
+import { tagUrl } from '../../utils/format';
+
+const posts = await listPosts();
+const counter = new Map<string, number>();
+for (const post of posts) {
+  for (const tag of post.data.tags) counter.set(tag, (counter.get(tag) ?? 0) + 1);
+}
+const tags = [...counter.entries()]
+  .map(([tag, count]) => ({ tag, count }))
+  .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, 'zh-CN'));
+---
+
+<BaseLayout title="标签" description="按标签浏览文章">
+  <div class="container container--wide">
+    <h1 class="page-title">标签</h1>
+    <p class="page-subtitle">共 {tags.length} 个标签</p>
+
+    {
+      tags.length === 0 ? (
+        <div class="empty">
+          <p>还没有标签。</p>
+          <p>
+            在文章 frontmatter 里写 <code>tags: [Astro, 教程]</code> 即可生成标签页。
+          </p>
+        </div>
+      ) : (
+        <ul class="tag-list">
+          {tags.map(({ tag, count }) => (
+            <li>
+              <a class="tag" href={tagUrl(tag)}>
+                #{tag} <span style="color: var(--text-mute);">{count}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )
+    }
+  </div>
+</BaseLayout>

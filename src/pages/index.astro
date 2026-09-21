@@ -1,0 +1,88 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PostCard from '../components/PostCard.astro';
+import { siteConfig } from '../consts';
+import { isAdmin } from '../lib/auth';
+import { listPosts } from '../lib/posts';
+import { tagUrl } from '../utils/format';
+
+// 登录后可以看到草稿，普通访客只看已发布内容
+const includeDrafts = isAdmin(Astro.cookies);
+const posts = await listPosts({ includeDrafts });
+
+const counter = new Map<string, number>();
+for (const post of posts) {
+  for (const tag of post.data.tags) counter.set(tag, (counter.get(tag) ?? 0) + 1);
+}
+const tags = [...counter.entries()]
+  .map(([tag, count]) => ({ tag, count }))
+  .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, 'zh-CN'));
+
+const latest = posts.slice(0, siteConfig.postsPerPage);
+const pinned = latest.filter((post) => post.data.featured);
+---
+
+<BaseLayout>
+  <div class="container container--wide">
+    <section class="hero">
+      <h1>{siteConfig.title}</h1>
+      <p>{siteConfig.description}</p>
+    </section>
+
+    {
+      posts.length === 0 ? (
+        <div class="empty" style="margin-top: 2rem;">
+          <p>还没有文章。</p>
+          <p>
+            把 Markdown 文件放进 <code>src/content/blog/</code> 目录就会自动出现在这里。
+          </p>
+        </div>
+      ) : (
+        <>
+          {pinned.length > 0 && (
+            <>
+              <div class="section-title">
+                <h2 style="font-size: 1.15rem; margin: 0;">推荐阅读</h2>
+              </div>
+              <ul class="post-list">
+                {pinned.map((post) => (
+                  <PostCard post={post} />
+                ))}
+              </ul>
+            </>
+          )}
+
+          <div class="section-title">
+            <h2 style="font-size: 1.15rem; margin: 0;">最新文章</h2>
+            <a href="/blog/">全部 {posts.length} 篇 →</a>
+          </div>
+          <ul class="post-list">
+            {latest.map((post) => (
+              <PostCard post={post} />
+            ))}
+          </ul>
+        </>
+      )
+    }
+
+    {
+      tags.length > 0 && (
+        <>
+          <div class="section-title">
+            <h2 style="font-size: 1.15rem; margin: 0;">标签</h2>
+            <a href="/tags/">全部标签 →</a>
+          </div>
+          <ul class="tag-list">
+            {tags.slice(0, 12).map(({ tag, count }) => (
+              <li>
+                <a class="tag" href={tagUrl(tag)}>
+                  #{tag} <span style="color: var(--text-mute);">{count}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </>
+      )
+    }
+  </div>
+</BaseLayout>

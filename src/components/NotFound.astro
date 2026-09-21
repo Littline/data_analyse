@@ -1,0 +1,22 @@
+---
+interface Props {
+  title?: string;
+  message?: string;
+}
+
+const {
+  title = '页面不存在',
+  message = '你访问的页面不存在，可能已经被移动或删除。',
+} = Astro.props;
+---
+
+<div class="container">
+  <div class="empty">
+    <h1 class="page-title" style="font-size: 3rem;">404</h1>
+    <p>{title}</p>
+    <p>{message}</p>
+    <p style="margin-top: 1.5rem;">
+      <a href="/">返回首页</a> · <a href="/blog/">浏览全部文章</a>
+    </p>
+  </div>
+</div>

@@ -1,0 +1,70 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { authEnabled } from '../../lib/auth';
+
+// 没设密码时后台是开放的，不需要登录页
+if (!authEnabled()) {
+  return Astro.redirect('/admin/');
+}
+
+const next = Astro.url.searchParams.get('next') ?? '/admin/';
+const safeNext = next.startsWith('/') && !next.startsWith('//') ? next : '/admin/';
+---
+
+<BaseLayout title="登录管理后台" description="输入管理密码">
+  <div class="container" style="max-width: 420px; padding-top: 2rem;">
+    <h1 class="page-title">登录管理后台</h1>
+    <p class="page-subtitle">请输入管理员密码，登录后才能发布或修改文章。</p>
+
+    <form class="admin-form" id="login-form" data-next={safeNext}>
+      <div class="admin-field">
+        <label for="password">管理密码</label>
+        <input type="password" id="password" name="password" autocomplete="current-password" autofocus />
+      </div>
+      <div id="login-errors"></div>
+      <div class="admin-actions">
+        <button class="btn btn--primary" type="submit" id="login-button">登录</button>
+        <a class="btn" href="/">返回网站</a>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    const form = document.getElementById('login-form') as HTMLFormElement;
+    const passwordEl = document.getElementById('password') as HTMLInputElement;
+    const errorEl = document.getElementById('login-errors') as HTMLElement;
+    const button = document.getElementById('login-button') as HTMLButtonElement;
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      button.disabled = true;
+      errorEl.innerHTML = '';
+
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: passwordEl.value }),
+        });
+
+        if (response.ok) {
+          location.href = form.dataset.next || '/admin/';
+          return;
+        }
+
+        const data = await response.json().catch(() => ({}));
+        errorEl.innerHTML = `<div class="admin-alert admin-alert--error">${(data.errors ?? [
+          '登录失败',
+        ]).join('<br>')}</div>`;
+        passwordEl.select();
+      } catch (error) {
+        errorEl.innerHTML = `<div class="admin-alert admin-alert--error">网络错误：${
+          (error as Error).message
+        }</div>`;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</BaseLayout>
+

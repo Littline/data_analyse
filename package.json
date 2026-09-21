@@ -1,0 +1,27 @@
+{
+  "name": "astro-md-blog",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "基于 Astro 的 Markdown 博客：管理员新增/替换 md 文件即可自动更新网站内容",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "node ./dist/server/entry.mjs",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "node scripts/check-content.mjs",
+    "new": "node scripts/new-post.mjs",
+    "publish": "node scripts/check-content.mjs && astro build"
+  },
+  "engines": {
+    "node": ">=18.20.8",
+    "npm": ">=9"
+  },
+  "dependencies": {
+    "@astrojs/markdown-remark": "^7.3.1",
+    "@astrojs/node": "^9.5.5",
+    "@astrojs/rss": "^4.0.19",
+    "astro": "^5.18.2",
+    "js-yaml": "^5.4.2"
+  }
+}

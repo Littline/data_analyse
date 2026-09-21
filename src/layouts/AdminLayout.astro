@@ -1,0 +1,55 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import { authEnabled } from '../lib/auth';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const { title = '管理后台', description = '在线写文章，保存后自动生成 md 文件' } = Astro.props;
+const passwordSet = authEnabled();
+---
+
+<BaseLayout title={title} description={description} bodyClass="admin">
+  <div class="admin-bar">
+    <div class="container container--wide admin-bar__inner">
+      <span class="admin-bar__title">管理后台</span>
+      <a class="admin-bar__link" href="/admin/">文章列表</a>
+      <a class="admin-bar__link" href="/admin/editor/">写新文章</a>
+      <a class="admin-bar__link" href="/" target="_blank" rel="noreferrer">查看网站</a>
+      <span class="admin-bar__spacer"></span>
+      {
+        passwordSet ? (
+          <button type="button" id="logout-button">
+            退出登录
+          </button>
+        ) : (
+          <span class="admin-bar__link">未设置管理密码</span>
+        )
+      }
+    </div>
+  </div>
+
+  <div class="container container--wide">
+    <slot />
+  </div>
+
+  <script>
+    document.getElementById('logout-button')?.addEventListener('click', async () => {
+      // 带上 JSON 头：Astro 的 CSRF 防护会放行非表单型请求
+      await fetch('/api/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      location.href = '/admin/login/';
+    });
+  </script>
+</BaseLayout>
+
+<style is:global>
+  body.admin main {
+    padding-top: 0;
+  }
+</style>

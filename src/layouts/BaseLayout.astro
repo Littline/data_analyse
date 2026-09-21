@@ -1,0 +1,74 @@
+---
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import { siteConfig } from '../consts';
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+  description?: string;
+  /** 文章页传入发布时间，用于结构化数据 */
+  publishedAt?: Date;
+  updatedAt?: Date;
+  ogType?: 'website' | 'article';
+  cover?: string;
+  /** 额外加在 <body> 上的 class，便于某个版式覆盖样式 */
+  bodyClass?: string;
+}
+
+const {
+  title,
+  description = siteConfig.description,
+  publishedAt,
+  updatedAt,
+  ogType = 'website',
+  cover,
+  bodyClass,
+} = Astro.props;
+
+const pageTitle = title ? `${title} · ${siteConfig.title}` : `${siteConfig.title} · ${siteConfig.tagline}`;
+const canonical = new URL(Astro.url.pathname, Astro.site).href;
+const ogImage = cover ? new URL(cover, Astro.site).href : undefined;
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={description} />
+    <meta name="author" content={siteConfig.author} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link
+      rel="alternate"
+      type="application/rss+xml"
+      title={`${siteConfig.title} RSS`}
+      href={new URL('rss.xml', Astro.site).href}
+    />
+
+    <meta property="og:site_name" content={siteConfig.title} />
+    <meta property="og:title" content={title ?? siteConfig.title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content={ogType} />
+    <meta property="og:url" content={canonical} />
+    {ogImage && <meta property="og:image" content={ogImage} />}
+    <meta name="twitter:card" content={ogImage ? 'summary_large_image' : 'summary'} />
+
+    {publishedAt && (
+      <meta property="article:published_time" content={publishedAt.toISOString()} />
+    )}
+    {updatedAt && <meta property="article:modified_time" content={updatedAt.toISOString()} />}
+
+    <meta name="generator" content={Astro.generator} />
+    <slot name="head" />
+  </head>
+  <body class={bodyClass}>
+    <Header />
+    <main>
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>

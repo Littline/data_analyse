@@ -1,0 +1,39 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import NotFound from '../components/NotFound.astro';
+import Toc from '../components/Toc.astro';
+import { getPage } from '../lib/pages';
+import { renderMarkdown } from '../lib/markdown.mjs';
+import { buildToc } from '../utils/toc';
+
+// 关于页内容同样来自 Markdown：src/content/pages/about.md
+const page = await getPage('about');
+const rendered = page ? await renderMarkdown(page.body) : null;
+const toc = rendered ? buildToc(rendered.headings) : [];
+
+if (!page || !rendered) {
+  Astro.response.status = 404;
+}
+---
+
+{
+  !page || !rendered ? (
+    <BaseLayout title="页面不存在">
+      <NotFound
+        title="关于页还没准备好"
+        message="请检查 src/content/pages/about.md 是否存在、frontmatter 是否正确。"
+      />
+    </BaseLayout>
+  ) : (
+    <BaseLayout title={page.data.title} description={page.data.description}>
+      <article class="container">
+        <header class="post-header">
+          <h1>{page.data.title}</h1>
+        </header>
+        <Toc headings={toc} />
+        <div class="prose" set:html={rendered.html} />
+      </article>
+    </BaseLayout>
+  )
+}
+
