@@ -1,0 +1,231 @@
+---
+import { isAdmin } from '../lib/auth';
+import type { Comment } from '../lib/comments';
+import { formatDateTime, relativeTime } from '../utils/format';
+
+interface Props {
+  postId: string;
+  comments: Comment[];
+}
+
+const { postId, comments } = Astro.props;
+const admin = isAdmin(Astro.cookies);
+---
+
+<section class="comments" id="comments">
+  <h2 class="comments__title">
+    评论 <span class="comments__count">{comments.length}</span>
+  </h2>
+
+  <div id="comment-message" class="admin-alert admin-alert--ok" hidden></div>
+  <p id="comment-error" class="admin-alert admin-alert--error" hidden></p>
+
+  {
+    comments.length === 0 ? (
+      <p class="comments__empty">还没有评论，来说两句吧。</p>
+    ) : (
+      <ul class="comment-list">
+        {comments.map((comment) => (
+          <li class="comment" data-comment-id={comment.id}>
+            <div class="comment__head">
+              <span class="comment__avatar" aria-hidden="true">
+                {comment.author.slice(0, 1).toUpperCase()}
+              </span>
+              <span class="comment__author">{comment.author}</span>
+              {comment.website && (
+                <a
+                  class="comment__site"
+                  href={comment.website}
+                  target="_blank"
+                  rel="nofollow ugc noopener noreferrer"
+                >
+                  网站
+                </a>
+              )}
+              <time class="comment__time" datetime={comment.createdAt} title={formatDateTime(new Date(comment.createdAt))}>
+                {relativeTime(new Date(comment.createdAt))}
+              </time>
+              {admin && (
+                <button
+                  class="comment__delete"
+                  type="button"
+                  data-post-id={postId}
+                  data-comment-id={comment.id}
+                >
+                  删除
+                </button>
+              )}
+            </div>
+            <div class="comment__body">{comment.body}</div>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
+  <form class="comment-form" id="comment-form" data-post-id={postId} novalidate>
+    <h3 class="comment-form__title">发表评论</h3>
+
+    <div class="comment-form__row">
+      <label class="comment-form__field">
+        <span>昵称<span class="comment-form__optional">（可留空）</span></span>
+        <input type="text" name="author" maxlength="40" placeholder="匿名" autocomplete="nickname" />
+      </label>
+      <label class="comment-form__field">
+        <span>邮箱<span class="comment-form__optional">（不公开）</span></span>
+        <input type="email" name="email" maxlength="120" placeholder="选填" autocomplete="email" />
+      </label>
+      <label class="comment-form__field">
+        <span>网址<span class="comment-form__optional">（选填）</span></span>
+        <input type="text" name="website" maxlength="200" placeholder="https://" autocomplete="url" />
+      </label>
+    </div>
+
+    <label class="comment-form__field">
+      <span>评论内容</span>
+      <textarea name="body" rows="5" maxlength="2000" placeholder="说点什么吧…" required></textarea>
+    </label>
+
+    {/* 蜜罐：正常用户看不到，只有爬虫会填 */}
+    <div class="comment-form__trap" aria-hidden="true">
+      <label>
+        昵称
+        <input type="text" name="nickname" tabindex="-1" autocomplete="off" />
+      </label>
+    </div>
+
+    <div class="comment-form__actions">
+      <button class="btn btn--primary" type="submit" id="comment-submit">发表评论</button>
+      <span class="comment-form__hint">
+        邮箱不会显示在页面上；提交后评论会立即出现在这里。
+      </span>
+    </div>
+  </form>
+
+  <script>
+    const form = document.getElementById('comment-form') as HTMLFormElement | null;
+    const messageEl = document.getElementById('comment-message');
+    const errorEl = document.getElementById('comment-error');
+    const submitButton = document.getElementById('comment-submit') as HTMLButtonElement | null;
+    const STORAGE_KEY = 'blog-comment-author';
+
+    function showError(messages: string[]) {
+      if (!errorEl) return;
+      errorEl.textContent = messages.join('；');
+      errorEl.hidden = messages.length === 0;
+    }
+
+    async function deleteComment(button: HTMLButtonElement) {
+      const postId = button.dataset.postId ?? '';
+      const commentId = button.dataset.commentId ?? '';
+
+      if (!confirm('确定删除这条评论吗？删除后无法恢复。')) return;
+
+      button.disabled = true;
+      const response = await fetch(
+        `/api/comments/${encodeURIComponent(commentId)}?postId=${encodeURIComponent(postId)}`,
+        { method: 'DELETE', headers: { 'Content-Type': 'application/json' } },
+      );
+
+      if (response.ok) {
+        location.hash = 'comments';
+        location.reload();
+        return;
+      }
+
+      const data = await response.json().catch(() => ({}));
+      alert(data.errors?.join('\n') ?? '删除失败');
+      button.disabled = false;
+    }
+
+    document.querySelectorAll('.comment__delete').forEach((button) => {
+      button.addEventListener('click', () => void deleteComment(button as HTMLButtonElement));
+    });
+
+    if (form) {
+      const fields = {
+        author: form.elements.namedItem('author') as HTMLInputElement,
+        email: form.elements.namedItem('email') as HTMLInputElement,
+        website: form.elements.namedItem('website') as HTMLInputElement,
+        body: form.elements.namedItem('body') as HTMLTextAreaElement,
+      };
+
+      // 回填上次填写的昵称、邮箱、网址，省得每次重填
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
+        if (saved.author) fields.author.value = saved.author;
+        if (saved.email) fields.email.value = saved.email;
+        if (saved.website) fields.website.value = saved.website;
+      } catch {
+        // localStorage 不可用时忽略
+      }
+
+      if (sessionStorage.getItem('comment-posted') === '1') {
+        sessionStorage.removeItem('comment-posted');
+        if (messageEl) {
+          messageEl.textContent = '评论发表成功，感谢你的留言！';
+          messageEl.hidden = false;
+        }
+      }
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        showError([]);
+
+        if (!fields.body.value.trim()) {
+          showError(['评论内容不能为空']);
+          fields.body.focus();
+          return;
+        }
+
+        if (submitButton) {
+          submitButton.disabled = true;
+          submitButton.textContent = '提交中…';
+        }
+
+        try {
+          const response = await fetch('/api/comments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              postId: form.dataset.postId,
+              author: fields.author.value,
+              email: fields.email.value,
+              website: fields.website.value,
+              body: fields.body.value,
+              nickname: (form.elements.namedItem('nickname') as HTMLInputElement).value,
+            }),
+          });
+
+          const data = await response.json().catch(() => ({}));
+
+          if (!response.ok) {
+            showError(data.errors ?? ['评论提交失败，请稍后再试']);
+            return;
+          }
+
+          localStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify({
+              author: fields.author.value,
+              email: fields.email.value,
+              website: fields.website.value,
+            }),
+          );
+
+          sessionStorage.setItem('comment-posted', '1');
+          location.hash = 'comments';
+          location.reload();
+        } catch (error) {
+          showError([`网络错误：${(error as Error).message}`]);
+        } finally {
+          if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = '发表评论';
+          }
+        }
+      });
+    }
+  </script>
+</section>
+

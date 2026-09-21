@@ -2,8 +2,10 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import NotFound from '../../components/NotFound.astro';
 import Toc from '../../components/Toc.astro';
+import Comments from '../../components/Comments.astro';
 import { siteConfig } from '../../consts';
 import { isAdmin } from '../../lib/auth';
+import { listComments } from '../../lib/comments';
 import { getPost, listPosts, renderPost } from '../../lib/posts';
 import {
   decodePathParam,
@@ -31,6 +33,7 @@ const next = index > 0 ? (posts[index - 1] ?? null) : null; // 更新一篇
 
 const rendered = post ? await renderPost(post) : null;
 const toc = rendered ? buildToc(rendered.headings) : [];
+const comments = post ? await listComments(post.id) : [];
 ---
 
 {
@@ -55,6 +58,11 @@ const toc = rendered ? buildToc(rendered.headings) : [];
             <span>{post.data.author ?? siteConfig.author}</span>
             <span>{readingTime(post.body)} 分钟阅读</span>
             {post.data.category && <span>{post.data.category}</span>}
+            {comments.length > 0 && (
+              <span>
+                <a href="#comments">{comments.length} 条评论</a>
+              </span>
+            )}
             {post.data.draft && <span class="badge-draft">草稿（仅登录后可见）</span>}
           </div>
           {post.data.updatedDate && (
@@ -90,6 +98,8 @@ const toc = rendered ? buildToc(rendered.headings) : [];
 
         <div class="prose" set:html={rendered.html} />
 
+        <Comments postId={post.id} comments={comments} />
+
         <footer class="post-footer">
           <span style="color: var(--text-mute);">感谢阅读，转载请注明出处。</span>
           <a href="/blog/">← 返回文章列表</a>
@@ -123,4 +133,3 @@ const toc = rendered ? buildToc(rendered.headings) : [];
     </BaseLayout>
   )
 }
-

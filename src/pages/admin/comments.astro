@@ -1,0 +1,111 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { listAllComments } from '../../lib/comments';
+import { getPost } from '../../lib/posts';
+import { formatDateTime, postUrl } from '../../utils/format';
+
+const groups = await listAllComments();
+
+// 补上文章标题，方便辨认
+const rows = [];
+for (const group of groups) {
+  const post = await getPost(group.postId, { includeDrafts: true });
+  rows.push({
+    postId: group.postId,
+    title: post?.data.title ?? null,
+    exists: Boolean(post),
+    comments: group.comments,
+  });
+}
+
+const total = rows.reduce((sum, row) => sum + row.comments.length, 0);
+const deleted = Astro.url.searchParams.get('deleted');
+---
+
+<AdminLayout title="评论管理">
+  <h1 class="page-title" style="margin-top: 1.5rem;">评论管理</h1>
+  <p class="page-subtitle">
+    共 {total} 条评论，分布在 {rows.length} 篇文章下 · 存储目录 <code>data/comments/</code>
+  </p>
+
+  {deleted && <div class="admin-alert admin-alert--ok">评论已删除。</div>}
+
+  {
+    rows.length === 0 ? (
+      <div class="admin-panel">
+        <p style="margin: 0; color: var(--text-soft);">还没有任何评论。</p>
+      </div>
+    ) : (
+      rows.map((row) => (
+        <div class="admin-panel">
+          <h2 class="admin-panel__title">
+            {row.exists ? (
+              <a href={postUrl({ id: row.postId })} target="_blank" rel="noreferrer">
+                {row.title}
+              </a>
+            ) : (
+              <span>
+                {row.title ?? row.postId}（文章已不存在）
+              </span>
+            )}
+            <span style="color: var(--text-mute); font-size: 0.85rem;">· {row.comments.length} 条</span>
+          </h2>
+
+          <ul class="admin-comment-list">
+            {row.comments.map((comment) => (
+              <li class="admin-comment">
+                <div class="admin-comment__meta">
+                  <strong>{comment.author}</strong>
+                  {comment.email && <span class="admin-comment__email">{comment.email}</span>}
+                  {comment.website && (
+                    <a href={comment.website} target="_blank" rel="noreferrer nofollow">
+                      {comment.website}
+                    </a>
+                  )}
+                  <time datetime={comment.createdAt}>{formatDateTime(new Date(comment.createdAt))}</time>
+                  <span style="flex: 1;" />
+                  <button
+                    class="btn btn--danger"
+                    type="button"
+                    data-post-id={row.postId}
+                    data-comment-id={comment.id}
+                  >
+                    删除
+                  </button>
+                </div>
+                <div class="admin-comment__body">{comment.body}</div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))
+    )
+  }
+
+  <script>
+    document.querySelectorAll('[data-comment-id]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const postId = button.getAttribute('data-post-id') ?? '';
+        const commentId = button.getAttribute('data-comment-id') ?? '';
+
+        if (!confirm('确定删除这条评论吗？删除后无法恢复。')) return;
+
+        (button as HTMLButtonElement).disabled = true;
+        const response = await fetch(
+          `/api/comments/${encodeURIComponent(commentId)}?postId=${encodeURIComponent(postId)}`,
+          { method: 'DELETE', headers: { 'Content-Type': 'application/json' } },
+        );
+
+        if (response.ok) {
+          location.href = '/admin/comments/?deleted=1';
+          return;
+        }
+
+        const data = await response.json().catch(() => ({}));
+        alert((data.errors ?? ['删除失败']).join('\n'));
+        (button as HTMLButtonElement).disabled = false;
+      });
+    });
+  </script>
+</AdminLayout>
+

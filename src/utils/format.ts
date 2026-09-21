@@ -16,6 +16,33 @@ export function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** 精确到分钟的日期时间：2026/9/21 14:05 */
+export function formatDateTime(date: Date): string {
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: siteConfig.timeZone,
+  }).format(date);
+}
+
+/** 相对时间：刚刚 / 3 分钟前 / 2 天前 / 具体日期 */
+export function relativeTime(date: Date): string {
+  const diff = Date.now() - date.valueOf();
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diff < minute) return '刚刚';
+  if (diff < hour) return `${Math.floor(diff / minute)} 分钟前`;
+  if (diff < day) return `${Math.floor(diff / hour)} 小时前`;
+  if (diff < 30 * day) return `${Math.floor(diff / day)} 天前`;
+
+  return formatDateTime(date);
+}
+
 /** 文章 id 转成 URL 路径片段（逐段编码，保留 / 分组） */
 export function postIdPath(id: string): string {
   return id

@@ -3,10 +3,12 @@ import path from 'node:path';
 import {
   parseFrontmatter,
   serializePost,
-  slugify,
   validatePostData,
 } from './frontmatter.mjs';
 import { renderMarkdown } from './markdown.mjs';
+import { writeAtomic } from './atomic';
+import { idFromTitle, isValidId } from './ids';
+import { deleteCommentsForPost, renameComments } from './comments';
 
 export interface PostData {
   title: string;
@@ -59,28 +61,6 @@ export type SaveResult =
 export function contentDir(): string {
   const custom = process.env.BLOG_CONTENT_DIR;
   return custom ? path.resolve(custom) : path.resolve(process.cwd(), 'src', 'content', 'blog');
-}
-
-/**
- * 允许的 id：英文字母、数字、下划线、连字符、点，以及中日韩等文字；
- * 支持用 / 分组（例如 2026/hello）。其它字符一律拒绝，杜绝路径穿越。
- */
-const ID_PATTERN = /^[\p{L}\p{N}._-]+(?:\/[\p{L}\p{N}._-]+)*$/u;
-
-export function isValidId(id: string): boolean {
-  if (!id || id.length > 200) return false;
-  if (!ID_PATTERN.test(id)) return false;
-  return id.split('/').every((segment) => segment !== '.' && segment !== '..');
-}
-
-/** 由标题推导文件名：中文标题退回 post-日期时间 的形式 */
-export function idFromTitle(title: string, now = new Date()): string {
-  const slug = slugify(title);
-  if (slug) return slug;
-
-  const pad = (value: number) => String(value).padStart(2, '0');
-  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
-  return `post-${stamp}`;
 }
 
 function toFilePath(id: string): string {
@@ -217,38 +197,6 @@ export async function getPostSource(id: string): Promise<{ id: string; raw: stri
   }
 }
 
-/**
- * 原子写入：先写临时文件再改名，避免读到写了一半的内容。
- * 临时文件放在项目根目录的 .tmp/ 下，不能放进内容目录，
- * 否则 Astro 的内容监听器会把它当成一篇文章并报警告。
- */
-async function writeAtomic(filePath: string, content: string): Promise<void> {
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-
-  const tempDir = path.resolve(process.cwd(), '.tmp');
-  const tempPath = path.join(
-    tempDir,
-    `${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`,
-  );
-
-  try {
-    await fs.mkdir(tempDir, { recursive: true });
-    await fs.writeFile(tempPath, content, 'utf8');
-    await fs.rename(tempPath, filePath);
-    return;
-  } catch {
-    // 跨磁盘或目标被占用时退回直接写入
-    await fs.rm(tempPath, { force: true }).catch(() => {});
-  }
-
-  try {
-    await fs.rm(filePath, { force: true });
-    await fs.rename(tempPath, filePath);
-  } catch {
-    await fs.writeFile(filePath, content, 'utf8');
-  }
-}
-
 async function resolveTargetId(input: SaveInput): Promise<string> {
   const provided = (input.id ?? '').trim().replace(/^\/+|\/+$/g, '');
   const candidate = provided || idFromTitle(input.title ?? '');
@@ -327,6 +275,8 @@ export async function updatePost(originalId: string, input: SaveInput): Promise<
   if (id !== originalId) {
     await fs.rm(originalPath, { force: true });
     renderCache.delete(originalPath);
+    // 文章换了网址，把它的评论一起搬过去
+    await renameComments(originalId, id);
   }
 
   renderCache.delete(nextPath);
@@ -342,6 +292,8 @@ export async function deletePost(id: string): Promise<boolean> {
     const filePath = toFilePath(id);
     await fs.rm(filePath);
     renderCache.delete(filePath);
+    // 文章没了，它下面的评论也一并清理
+    await deleteCommentsForPost(id);
     return true;
   } catch {
     return false;

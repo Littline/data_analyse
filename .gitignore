@@ -18,6 +18,9 @@ pnpm-debug.log*
 .cache/
 .tmp/
 
+# 访客评论（运行时数据，不进版本库；想一起备份就删掉这一行）
+data/
+
 # 编辑器与系统
 .idea/
 .vscode/*

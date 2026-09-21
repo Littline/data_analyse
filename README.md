@@ -6,7 +6,7 @@
 1. **在网页后台写**：打开 `/admin/`，填表单 → 保存 → 后端自动生成 md 文件 → 文章立刻出现在网站上；
 2. **直接放 md 文件**：把 `.md` 文件复制到 `src/content/blog/`，刷新页面即可看到。
 
-两种方式写的是同一批文件，可以随意混用。
+两种方式写的是同一批文件，可以随意混用。文章底部还带评论功能：访客可以直接留言，站长可以删除。
 
 ## 启动方式
 
@@ -175,6 +175,37 @@ featured: false
 放进 `public/images/`，在 Markdown 里写 `![说明](/images/文件名.jpg)`。
 运行期间新增的图片也能直接访问，不需要重新构建。
 
+## 文章评论
+
+每篇文章底部都有评论区：访客填昵称、邮箱（选填）、网址（选填）和内容就能留言，
+提交后立即可见；站长登录后，每条评论旁边会出现「删除」按钮。
+
+评论存放在 `data/comments/` 目录，**每篇文章一个 JSON 文件**（`hello-world.md` 对应
+`data/comments/hello-world.json`），和文章一样是「文件即数据」，便于备份和迁移。
+
+### 访客侧
+
+- 昵称可留空，留空显示为「匿名」；邮箱只保存不公开，仅后台可见；网址会显示成链接（带 `nofollow`）。
+- 内容限 2000 字，同一 IP **10 分钟内最多发 5 条**，超出会提示稍后再试。
+- 表单带一个隐藏的蜜罐字段，机器人填了会被静默丢弃，不会写进文件。
+- 昵称、邮箱、网址会记在浏览器本地，下次评论自动填好。
+
+### 站长侧
+
+- **在文章页删**：登录后在评论区每条留言右侧点「删除」。
+- **在后台集中看**：打开 `/admin/comments/`，按文章分组查看所有评论（含访客邮箱），逐条删除。
+- 文章**改名**时评论会跟着搬过去，**删除**文章时它的评论会一并清理。
+
+### 关于评论的几个说明
+
+- **未设置 `ADMIN_PASSWORD` 时**，所有人都是「管理员」，也就是任何访客都能删除评论 ——
+  所以放到公网前务必设置密码。
+- 评论数据默认**不进 Git**（`.gitignore` 里忽略了 `data/`），这样访客邮箱不会进版本库。
+  想连评论一起备份到仓库，把 `.gitignore` 里的 `data/` 一行删掉即可。
+- 备份时记得连 `data/comments/` 一起复制，否则评论会丢。
+
+需要删除某条评论但找不到按钮时，直接编辑对应的 JSON 文件也有效（删掉那个对象即可）。
+
 ## 保存之后发生了什么
 
 ```text
@@ -231,6 +262,8 @@ ADMIN_PASSWORD='你的密码' PORT=4321 npm start
 │  ├─ favicon.svg
 │  ├─ robots.txt
 │  └─ images/               # 文章配图放这里，用 /images/xxx.jpg 引用
+├─ data/
+│  └─ comments/             # ★ 评论数据：每篇文章一个 JSON 文件（不进 Git）
 ├─ scripts/
 │  ├─ new-post.mjs          # npm run new
 │  └─ check-content.mjs     # npm run check
@@ -241,17 +274,20 @@ ADMIN_PASSWORD='你的密码' PORT=4321 npm start
    │  ├─ blog/              # ★ 文章目录：网页后台和手动放 md 都写到这里
    │  └─ pages/             # 独立页面，如 about.md
    ├─ lib/
+   │  ├─ comments.ts        # 评论读取/新增/删除、限流、蜜罐
    │  ├─ frontmatter.mjs    # frontmatter 解析、校验、序列化
    │  ├─ posts.ts           # 读取/写入文章（含原子写入与渲染缓存）
    │  ├─ markdown.mjs       # Markdown → HTML（与 Astro 同一套管线）
    │  ├─ auth.ts            # 登录会话
+   │  ├─ ids.ts             # 文章 id 规则
+   │  ├─ atomic.ts          # 原子写入
    │  └─ api.ts             # 接口公共工具
    ├─ pages/
    │  ├─ index.astro / blog/ / tags/ / about.astro / 404.astro
    │  ├─ rss.xml.ts / sitemap.xml.ts / images/[...path].ts
-   │  ├─ admin/             # 后台：文章列表、编辑器、登录页
-   │  └─ api/               # 接口：posts、preview、login、logout
-   ├─ components/           # 页头、页脚、文章卡片、目录、404
+   │  ├─ admin/             # 后台：文章列表、编辑器、评论管理、登录页
+   │  └─ api/               # 接口：posts、comments、preview、login、logout
+   ├─ components/           # 页头、页脚、文章卡片、目录、评论区、404
    ├─ layouts/
    └─ styles/global.css     # 全站样式（含后台样式）
 ```
@@ -264,6 +300,8 @@ ADMIN_PASSWORD='你的密码' PORT=4321 npm start
 | `/api/posts/<id>` | PUT | 修改文章（同时改 `id` 等于改文件名） |
 | `/api/posts/<id>` | DELETE | 删除文章 |
 | `/api/preview` | POST | 传 `{ body }`，返回渲染后的 HTML |
+| `/api/comments` | POST | 发表评论（对访客开放），JSON 字段：`postId`、`author`、`email`、`website`、`body` |
+| `/api/comments/<评论id>?postId=<文章id>` | DELETE | 删除评论（需要管理员登录） |
 | `/api/login`、`/api/logout` | POST | 登录、退出 |
 
 注意：请求请带上 `Content-Type: application/json`，否则会被 Astro 的 CSRF 防护拦下（返回 403）。
@@ -286,6 +324,13 @@ md 文件从内容目录删除后无法在界面恢复，如果用 Git 管理内
 
 **怎么在发布前检查内容？**
 `npm run check` 会检查所有 md 的 frontmatter，报错会指出文件和字段。
+
+**评论被别人刷了怎么办？**
+在文章页或后台 `/admin/comments/` 点「删除」即可。同一 IP 10 分钟最多 5 条的限制
+会自动挡住大部分刷屏；真被盯上时可以考虑加验证码或改成先审后发（改 `src/lib/comments.ts`）。
+
+**访客的邮箱会公开吗？**
+不会。文章页只显示昵称、网址和内容，邮箱仅出现在后台评论管理页。
 
 **开发时终端出现 `EBUSY` / `Duplicate id` 警告要紧吗？**
 一般出现在保存文件的瞬间，服务会自己重试。如果一直刷，检查是否有两个 md 文件名重复 ——
@@ -321,4 +366,3 @@ git config --global --add safe.directory F:/work/data_analyse/data_analyse
 导致「没有 Content-Type 的 POST/DELETE」被误判为跨站请求而返回 403。项目里所有前端接口调用
 都显式带上 `Content-Type: application/json` 来避开这个判断 —— 既保证浏览器端可用，
 也没有降低 CSRF 防护（恶意网站无法伪造该请求头）。
-
